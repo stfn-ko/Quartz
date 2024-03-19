@@ -35,6 +35,7 @@ impl Convert for Hash {
 
 pub(crate) struct NakedBlock {
     pub id: u64,
+    pub nonce: u64,
     pub data: String,
     pub timestamp: i64,
     pub p_hash: Hash,
@@ -44,6 +45,7 @@ impl NakedBlock {
     pub(crate) fn new(id: u64, data: &str, p_hash: Hash) -> Self {
         NakedBlock {
             id,
+            nonce: 0,
             data: data.to_string(),
             timestamp: Utc::now().timestamp(),
             p_hash,
@@ -70,7 +72,6 @@ impl std::fmt::Debug for NakedBlock {
 
 pub(crate) struct Block {
     pub hash: Hash,
-    pub nonce: u64,
     pub naked: NakedBlock,
 }
 
@@ -93,32 +94,29 @@ impl Block {
         Self::mine_block(NakedBlock::new(0, "genesis", Self::rand_hash()))
     }
 
-    fn mine_block(nb: NakedBlock) -> Self {
-        let mut nonce: u64 = 0;
-
+    fn mine_block(mut nb: NakedBlock) -> Self {
         loop {
-            let hash = Self::gen_hash(&nb, &nonce);
+            let hash = Self::gen_hash(&nb);
             if hash.to_bin().starts_with(Self::DIFFICULTY_PREFIX) {
                 return Block {
                     hash: hash,
-                    nonce,
                     naked: nb,
                 };
             }
 
-            nonce += 1;
+            nb.nonce += 1;
         }
     }
 
-    fn gen_hash(naked: &NakedBlock, nonce: &u64) -> Hash {
+    fn gen_hash(naked: &NakedBlock) -> Hash {
         let json_data = json!({
             "id": naked.id,
-            "nonce": nonce,
+            "nonce": naked.nonce,
             "naked": naked.data,
             "timestamp": naked.timestamp,
             "p_hash": naked.p_hash,
         });
-
+        
         let mut hasher = Sha256::new();
         hasher.update(json_data.to_string().as_bytes());
         hasher
@@ -197,7 +195,7 @@ impl Block {
     }
 
     fn validate_hash(&self) -> bool {
-        if Self::gen_hash(&self.naked, &self.nonce) != self.hash {
+        if Self::gen_hash(&self.naked) != self.hash {
             eprintln!(
                 "quartz :: block :: validation error >> block with id `{}` has invalid hash",
                 self.naked.id
@@ -214,7 +212,6 @@ impl std::fmt::Debug for Block {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Block")
             .field("hash", &self.hash.to_hex())
-            .field("nonce", &self.nonce)
             .field("naked", &self.naked)
             .finish()
     }
